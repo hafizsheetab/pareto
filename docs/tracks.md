@@ -1,8 +1,8 @@
 # Tracks
 
-Four pre-scaffolded tracks plus a fifth "design your own" lane.
+Three pre-scaffolded tracks plus a fourth "design your own" lane.
 
-All five run in **Studio** with no install (browser, `uniqx` pre-installed, key pre-injected) — or locally via the [quickstart](quickstart.md) if you prefer your own Python environment.
+All four run in **Studio** with no install (browser, `uniqx` pre-installed, key pre-injected) — or locally via the [quickstart](quickstart.md) if you prefer your own Python environment.
 
 ## DFT — density functional theory
 
@@ -61,22 +61,14 @@ All five run in **Studio** with no install (browser, `uniqx` pre-installed, key 
 
 **Baseline**: NumPy reference integrator in [tracks/md/baseline.py](../tracks/md/baseline.py). Compare total-energy drift over a fixed trajectory.
 
----
+### Sub-track: ab-initio MD ([tracks/md/aimd/](../tracks/md/aimd/))
 
-## AIMD — ab-initio molecular dynamics
+Same integrator, harder force evaluation. Replaces the classical LJ force with per-step RHF SCF on H₂O — Born-Oppenheimer MD: solve the electronic structure at every geometry, take finite-difference forces, velocity-Verlet the nuclei. Two challenge levels:
 
-**Starter problem**: H₂O Born-Oppenheimer MD. Per-step RHF SCF for the electronic energy, finite-difference forces, velocity-Verlet for the nuclei. Working NumPy/SciPy implementation is provided as the baseline.
+- **Level 1** — compile just the SCF loop with `ux.fori_loop`; keep the Python integral engine for `S`, `T`, `V`, `eri`. The naïve "one submit per SCF iteration" path is slower than NumPy; getting the whole loop into one module is the point.
+- **Level 2** — drop the Python integral engine entirely; one backend submit per geometry via the precompiled `uniqx.domains.chemistry.scf_module` kernel.
 
-**SDK surface**:
-- `ux.fori_loop` for compiling the SCF iteration as a single backend module (Level 1)
-- `uniqx.domains.chemistry.scf_module` for replacing the whole energy evaluation per geometry (Level 2)
-
-**Where to push**:
-- Level 1 — replace just the RHF-SCF loop with `ux.fori_loop`; keep the Python integral engine for `S`, `T`, `V`, `eri`
-- Level 2 — drop the Python integral engine entirely; one backend submit per geometry via the precompiled chemistry kernel
-- Larger molecules, longer trajectories, NVT thermostatting
-
-**Baseline**: NumPy/SciPy AIMD in [tracks/AIMD/baseline.py](../tracks/AIMD/baseline.py).
+**Baseline**: NumPy/SciPy AIMD in [tracks/md/aimd/baseline.py](../tracks/md/aimd/baseline.py).
 
 ---
 

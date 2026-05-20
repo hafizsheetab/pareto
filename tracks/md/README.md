@@ -8,6 +8,7 @@ Run a molecular-dynamics step traced through the SDK. The platform places each m
 - [`harmonic_step.py`](harmonic_step.py) — builds the traced module + runtime inputs.
 - [`lj_forces.py`](lj_forces.py) — anharmonic Lennard-Jones force kernel (NumPy reference + a tracing scaffold to extend).
 - [`baseline.py`](baseline.py) — NumPy reference integrator for both the harmonic and LJ paths.
+- [`aimd/`](aimd/) — Ab-initio sub-track: H₂O Born-Oppenheimer MD. Per-step RHF SCF for the electronic energy, finite-difference forces, velocity-Verlet for the nuclei. Two challenge levels — (L1) compile only the SCF loop with `ux.fori_loop`, (L2) replace the whole energy evaluation per geometry via the precompiled `scf_module` chemistry kernel. See [`aimd/README.md`](aimd/README.md).
 
 ## Why harmonic first
 

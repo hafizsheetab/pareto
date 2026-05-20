@@ -92,7 +92,7 @@ Every team member's name goes into `results.json.members`. Pick one *team handle
 | **AIMD** | Ab-initio Molecular Dynamics using RHF and velocity-Verlet | [tracks/AIMD/](tracks/AIMD/) |
 | **Bring your own** | Any workload you can defend with a baseline | [examples/INDEX.md](examples/INDEX.md) |
 
-The three pre-defined tracks each ship a working notebook, a NumPy/PySCF baseline, and a problem-extension prompt. The fourth track is open-ended: 15 curated example notebooks (`examples/notebooks/`) plus the full gallery of 60+ at [app.oriqx.com/examples](https://app.oriqx.com/examples) give you starting points for chemistry, quantum simulation, optimization, ML, and finance. Pick what fits your team, bring a baseline, defend your Pareto choice.
+The four pre-defined tracks each ship a working notebook, a NumPy/PySCF baseline, and a problem-extension prompt. The fifth track is open-ended: 30 curated example notebooks (`examples/notebooks/`), each verified end-to-end against the production gateway with a Validation cell, plus the full gallery at [app.oriqx.com/examples](https://app.oriqx.com/examples) give you starting points for chemistry, quantum simulation, optimization, ML, and finance. Pick what fits your team, bring a baseline, defend your Pareto choice.
 
 You are free to change the workload, the basis, the grid, the integrator — anything. The starter is a floor, not a ceiling.
 

@@ -1,8 +1,8 @@
 # Tracks
 
-Three pre-scaffolded tracks plus a fourth "design your own" lane.
+Four pre-scaffolded tracks plus a fifth "design your own" lane.
 
-All four run in **Studio** with no install (browser, `uniqx` pre-installed, key pre-injected) — or locally via the [quickstart](quickstart.md) if you prefer your own Python environment.
+All five run in **Studio** with no install (browser, `uniqx` pre-installed, key pre-injected) — or locally via the [quickstart](quickstart.md) if you prefer your own Python environment.
 
 ## DFT — density functional theory
 
@@ -63,6 +63,23 @@ All four run in **Studio** with no install (browser, `uniqx` pre-installed, key 
 
 ---
 
+## AIMD — ab-initio molecular dynamics
+
+**Starter problem**: H₂O Born-Oppenheimer MD. Per-step RHF SCF for the electronic energy, finite-difference forces, velocity-Verlet for the nuclei. Working NumPy/SciPy implementation is provided as the baseline.
+
+**SDK surface**:
+- `ux.fori_loop` for compiling the SCF iteration as a single backend module (Level 1)
+- `uniqx.domains.chemistry.scf_module` for replacing the whole energy evaluation per geometry (Level 2)
+
+**Where to push**:
+- Level 1 — replace just the RHF-SCF loop with `ux.fori_loop`; keep the Python integral engine for `S`, `T`, `V`, `eri`
+- Level 2 — drop the Python integral engine entirely; one backend submit per geometry via the precompiled chemistry kernel
+- Larger molecules, longer trajectories, NVT thermostatting
+
+**Baseline**: NumPy/SciPy AIMD in [tracks/AIMD/baseline.py](../tracks/AIMD/baseline.py).
+
+---
+
 ## Bring your own
 
 You may submit against a workload that is not one of the three tracks above. To qualify:
@@ -77,7 +94,7 @@ Custom workloads are scored on the same four criteria as the pre-defined tracks.
 
 The fastest way to bootstrap a custom workload is to fork one of the curated examples:
 
-- **15 examples in this repo** — see [`examples/INDEX.md`](../examples/INDEX.md). Covers foundational tracing, chemistry, quantum simulation, optimization, ML, and two real-world demonstrators.
-- **Full gallery (60+)** — [app.oriqx.com/examples](https://app.oriqx.com/examples). Sign in with your hackathon account to browse and open any notebook in Studio.
+- **30 examples in this repo** — see [`examples/INDEX.md`](../examples/INDEX.md). Each ends with a Validation cell that asserts gateway-vs-classical agreement. Covers foundational tracing, chemistry, physics/PDEs, sampling, ML, optimisation, interop, and real-world demonstrators.
+- **Full gallery** — [app.oriqx.com/examples](https://app.oriqx.com/examples). Sign in with your hackathon account to browse and open any notebook in Studio.
 
 Every example follows the same `problem → trace → preflight → run → oracle-compare` skeleton — you replace the problem, keep the skeleton, and you have a runnable submission.

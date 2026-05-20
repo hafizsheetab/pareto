@@ -51,7 +51,7 @@ The traced module's function expects N parameters. You passed M values. Inspect 
 No. The decorator traces operations into IR; calling NumPy at trace time computes locally and breaks the abstraction. Use `uniqx.ops` for anything inside the decorated function. NumPy is fine in your baseline, your setup code, and your post-processing.
 
 **Can I send precomputed matrices as `runtime_inputs`?**
-Yes — that's how `build_lbm_step_module` ships the operator and initial state. The rule is about not bypassing tracing with hidden compute, not about input shapes. Big inputs are slow to serialize; prefer building structure inside the trace when you can.
+Yes — that's how the MD track ships the precomputed `X`, `g_J`, `g_K`, `H` matrices into the SCF loop module. The rule is about not bypassing tracing with hidden compute, not about input shapes. Big inputs are slow to serialize; prefer building structure inside the trace when you can.
 
 ## Submission
 

@@ -1,38 +1,50 @@
 # Track: CFD
 
-Run a 2-D Lattice-Boltzmann channel-flow step traced through the SDK. The platform places the matmul on whatever hardware the engine thinks is best; you set the grid, the Reynolds number, and the number of time steps.
+A finite-difference solver for 2-D incompressible Stokes flow using **Chorin's projection method**, designed as a heterogeneous-computing workflow where each physical step maps to a distinct hardware target. The platform decides where each stage runs; you decide the grid, the Reynolds number, the pressure solver, and how far you push the QPU path.
 
-## What ships
+## Governing Equations
 
-- [`starter.ipynb`](starter.ipynb) — 64 × 16 Poiseuille channel at Re=100, single LBM step traced as a matmul, full preflight workflow.
-- [`baseline.py`](baseline.py) — Pure-NumPy reference LBM step. Used to validate that the gateway's matmul matches.
-- [`hackathon_cfd/`](hackathon_cfd/) — extended sub-track: 2-D incompressible Stokes flow via Chorin projection, three hardware-mapped stages (diffusion → pressure Poisson → correction), lid-driven cavity at Re=100. See [`hackathon_cfd/README.md`](hackathon_cfd/README.md).
+$$\frac{\partial \mathbf{u}}{\partial t} = -\frac{1}{\rho}\nabla p + \nu \nabla^2 \mathbf{u}, \qquad \nabla \cdot \mathbf{u} = 0$$
 
-## SDK surface
+The advection term is dropped (low Reynolds number assumption).
 
-```python
-from uniqx.cfd import ChannelFlow, LidDrivenCavity
-from uniqx.cfd import build_lbm_step_module, build_diffusion_step_module
+## Solution Method
+
+Each time step splits into three hardware-mapped stages:
+
+| Step | Equation | Hardware |
+|------|----------|----------|
+| **A — Diffusion** | $\mathbf{u}^* = \mathbf{u}^n + \Delta t\, \nu \nabla^2 \mathbf{u}^n$ | GPU / TPU |
+| **B — Pressure Poisson** | $\nabla^2 p = \frac{\rho}{\Delta t} \nabla \cdot \mathbf{u}^*$ | QPU (classical JAX path) |
+| **C — Correction** | $\mathbf{u}^{n+1} = \mathbf{u}^* - \frac{\Delta t}{\rho} \nabla p$ | CPU / TPU |
+
+Test case: **lid-driven cavity** at Re = 100.
+
+## Quick Start
+
+```bash
+pip install numpy scipy matplotlib   # add jax jaxlib for GPU/TPU
+python main.py
 ```
 
-`build_lbm_step_module(flow)` returns `(module, runtime_inputs, metadata)`:
+Output is saved to `results.png` (velocity magnitude, streamlines, pressure).
 
-- `module` — traced one-step operator `f_{n+1} = A @ f_n` with a kinetic-energy diagnostic
-- `runtime_inputs` — pre-encoded buffer-view strings for the operator and initial state
-- `metadata` — dict with `dim`, `nx`, `ny`, `tau`, `nu`, `Re`, `state_size`
+## Configuration
 
-Internally the engine pre-builds `A = S @ C` (streaming × collision) in Python and ships it as a `dim*Q × dim*Q` matrix. The traced module is therefore one matmul plus a dot product per step.
+All parameters live in `config.py`:
 
-## Where to push beyond the starter
+```python
+N               = 64       # grid resolution (N×N interior nodes)
+NU              = 0.01     # kinematic viscosity
+PRESSURE_SOLVER = "cg"     # "direct" | "cg" | "vqls"
+```
 
-| Direction | What changes |
-|---|---|
-| Scale grid to 256 × 64 | State vector grows 16×; matmul is the dominant cost; GPU starts beating CPU |
-| Cavity at Re=1000 vs Re=100 | `tau` shrinks; numerical stability tightens; `max_error_rate` grows |
-| Multi-step trajectory | Submit N steps in a loop; the engine can cache the operator |
-| Couple LBM with the diffusion step (`build_diffusion_step_module`) | Two traced kernels stitched together; thermal channel |
-| Multi-relaxation-time (MRT) collision | Roll your own collision matrix; compare against BGK |
+## Swapping the Pressure Solver
 
-## Reference behaviour
+The linear system $Ax = b$ is solved via `qpu_linalg.solve()`:
 
-For the starter channel (64 × 16, Re=100), the analytical Poiseuille profile is parabolic in `y` at the outlet. The baseline reproduces it. Your traced run should match within ~5% L2 error after a few hundred steps.
+```python
+pressure_vector = qpu_linalg.solve(A_matrix, b, method="vqls", tolerance=1e-4)
+```
+
+To connect a real QPU, implement `_solve_vqls()` in `qpu_linalg.py`. Classical backends (`"direct"`, `"cg"`) use JAX and run on CPU/GPU/TPU with no code changes.

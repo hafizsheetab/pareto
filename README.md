@@ -87,11 +87,11 @@ Every team member's name goes into `results.json.members`. Pick one *team handle
 | Track | What you optimize | Starter |
 |---|---|---|
 | **DFT** | SCF energy + NMR shieldings for a small molecule | [tracks/dft/](tracks/dft/) |
-| **CFD** | 2-D Lattice-Boltzmann channel or cavity flow | [tracks/cfd/](tracks/cfd/) |
-| **MD** | Harmonic FCC crystal velocity-Verlet (LJ + ab-initio sub-tracks scaffolded) | [tracks/md/](tracks/md/) |
+| **CFD** | 2-D incompressible Stokes flow via Chorin projection (diffusion → pressure → correction) | [tracks/cfd/](tracks/cfd/) |
+| **MD** | H₂O Born-Oppenheimer MD: per-step RHF SCF + velocity-Verlet | [tracks/md/](tracks/md/) |
 | **Bring your own** | Any workload you can defend with a baseline | [examples/INDEX.md](examples/INDEX.md) |
 
-The three pre-defined tracks each ship a working notebook, a NumPy/PySCF baseline, and a problem-extension prompt. The fourth track is open-ended: 30 curated example notebooks (`examples/notebooks/`), each verified end-to-end against the production gateway with a Validation cell, plus the full gallery at [app.oriqx.com/examples](https://app.oriqx.com/examples) give you starting points for chemistry, quantum simulation, optimization, ML, and finance. Pick what fits your team, bring a baseline, defend your Pareto choice.
+The three pre-defined tracks each ship a runnable reference implementation, a NumPy/SciPy/PySCF baseline, and a problem-extension prompt. The fourth track is open-ended: 30 curated example notebooks (`examples/notebooks/`), each verified end-to-end against the production gateway with a Validation cell, plus the full gallery at [app.oriqx.com/examples](https://app.oriqx.com/examples) give you starting points for chemistry, quantum simulation, optimization, ML, and finance. Pick what fits your team, bring a baseline, defend your Pareto choice.
 
 You are free to change the workload, the basis, the grid, the integrator — anything. The starter is a floor, not a ceiling.
 

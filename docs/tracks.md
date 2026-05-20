@@ -25,50 +25,42 @@ All four run in **Studio** with no install (browser, `uniqx` pre-installed, key 
 
 ## CFD — computational fluid dynamics
 
-**Starter problem**: 2-D Lattice-Boltzmann Poiseuille channel, 64 × 16 grid, Re=100, 200 steps. Tracks the kinetic-energy diagnostic over time.
+**Starter problem**: 2-D incompressible Stokes flow via **Chorin's projection method**. Lid-driven cavity at Re=100 on a 64 × 64 grid. Each time step splits into three hardware-mapped stages:
 
-**SDK surface**:
-- `uniqx.cfd.ChannelFlow(nx, ny, Re)` or `uniqx.cfd.LidDrivenCavity(n, Re)`
-- `uniqx.cfd.build_lbm_step_module(flow)` → `(module, runtime_inputs, metadata)`
-- `uniqx.cfd.build_diffusion_step_module(nx, ny, alpha, n_steps)` — thermal diffusion via `expv`
+| Step | Equation | Hardware |
+|------|----------|----------|
+| **A — Diffusion** | `u* = uⁿ + Δt ν ∇²uⁿ` | GPU / TPU |
+| **B — Pressure Poisson** | `∇²p = (ρ/Δt) ∇·u*` | QPU (classical JAX path) |
+| **C — Correction** | `uⁿ⁺¹ = u* − (Δt/ρ) ∇p` | CPU / TPU |
+
+**Files**: `main.py` (entry), `solver.py` (time loop), `step_a_diffusion.py` / `step_b_pressure.py` / `step_c_correction.py` (per-stage kernels), `grid.py`, `boundary.py`, `fd_operators.py`, `linalg.py`, `config.py`, `uniqx_client.py`, `visualize.py`.
 
 **Where to push**:
-- Scale the grid to 256 × 64 or beyond
-- Cavity flow at Re=1000 vs. Re=100 — the Pareto front moves
-- Couple LBM with the diffusion step for a thermal channel
-- Compare BGK collision against a multi-relaxation-time variant (you'd build the operator yourself)
+- Scale the grid to 256² or beyond; the Poisson solve dominates
+- Cavity at Re=1000 — the Pareto front moves
+- Swap the pressure solver (`PRESSURE_SOLVER = "cg" | "direct" | "vqls"`) and connect a real QPU by implementing `_solve_vqls()` in `linalg.py`
+- Extend Stokes to Navier-Stokes by reintroducing the advection term
 
-**Baseline**: NumPy reference LBM step in [tracks/cfd/baseline.py](../tracks/cfd/baseline.py).
+**Baseline**: The classical CG / direct solver paths in `solver.py` serve as the reference. `python main.py` writes `results.png` (velocity, streamlines, pressure).
 
 ---
 
-## MD — molecular dynamics
+## MD — molecular dynamics (ab-initio)
 
-**Starter problem**: 64 argon atoms in a periodic box, Lennard-Jones 6-12, velocity-Verlet integrator, NVE ensemble, 500 steps.
+**Starter problem**: H₂O Born-Oppenheimer molecular dynamics. At every timestep solve the Restricted Hartree-Fock (RHF) SCF equations on STO-3G for the electronic energy, take finite-difference forces, propagate the nuclei with velocity-Verlet. A working NumPy/SciPy implementation is provided as the baseline.
 
-**SDK surface**:
-- `uniqx.domains.common.spatial.pairwise_distances`, `neighbor_list` (pure Python pre-computation)
-- `uniqx.ops` — primitive operations to trace force and integrator kernels
-- `@uniqx.to_module` to wrap the per-step kernel
+**Two challenge levels**:
+- **Level 1** — replace just the RHF-SCF loop with `ux.fori_loop`. Matrices `X`, `g_J`, `g_K`, `H` are precomputed in Python and passed as runtime inputs. The whole loop compiles into one IR module per geometry; the naïve "one submit per SCF iteration" path is slower than NumPy because of network round-trips, so getting the loop architecture right is the core of the challenge.
+- **Level 2** — replace the entire energy evaluation with a single call to the precompiled `uniqx.domains.chemistry.scf_module` chemistry kernel. No Python integral engine in the hot loop — one backend submit per geometry.
 
-**Status**: The SDK ships spatial utilities but does not ship a packaged MD integrator. The starter scaffolds one for you in [tracks/md/](../tracks/md/) — `lj_forces.py` traces the LJ pairwise force, `velocity_verlet.py` traces the integrator step. **This is the most open-ended track**: you are likely to want to extend or replace the integrator, swap in a different force field, or add thermostatting. That is the point.
+**Files**: `baseline.py` (entry point), `aimd.py` (integrator), `scf.py` (electronic structure), `integrals.py` (McMurchie-Davidson engine), `basis.py` (STO-3G), `constants.py`, `sto-3g.dat`.
 
 **Where to push**:
-- Larger systems (256, 1024 atoms) — neighbor list cost vs. force cost shifts
-- Different force fields: Buckingham, harmonic bonds, plain Coulomb
-- Langevin or Nosé-Hoover thermostatting
-- A learned force field (one of the chemistry modules sketches a GNN pattern)
+- Larger molecules (NH₃, CH₄, H₂O₂) — graph fan-out grows
+- Longer trajectories, NVT thermostatting (Langevin, Nosé-Hoover)
+- Tighter SCF convergence — read the `max_error_rate` column from `preflight()`
 
-**Baseline**: NumPy reference integrator in [tracks/md/baseline.py](../tracks/md/baseline.py). Compare total-energy drift over a fixed trajectory.
-
-### Sub-track: ab-initio MD ([tracks/md/aimd/](../tracks/md/aimd/))
-
-Same integrator, harder force evaluation. Replaces the classical LJ force with per-step RHF SCF on H₂O — Born-Oppenheimer MD: solve the electronic structure at every geometry, take finite-difference forces, velocity-Verlet the nuclei. Two challenge levels:
-
-- **Level 1** — compile just the SCF loop with `ux.fori_loop`; keep the Python integral engine for `S`, `T`, `V`, `eri`. The naïve "one submit per SCF iteration" path is slower than NumPy; getting the whole loop into one module is the point.
-- **Level 2** — drop the Python integral engine entirely; one backend submit per geometry via the precompiled `uniqx.domains.chemistry.scf_module` kernel.
-
-**Baseline**: NumPy/SciPy AIMD in [tracks/md/aimd/baseline.py](../tracks/md/aimd/baseline.py).
+**Baseline**: NumPy/SciPy AIMD in [tracks/md/baseline.py](../tracks/md/baseline.py).
 
 ---
 

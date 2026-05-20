@@ -29,7 +29,9 @@ exclude:
   - templates/submission/submission.ipynb
   - tracks/*/starter.ipynb
   - tracks/*/baseline.py
-  - tracks/md/harmonic_step.py
-  - tracks/md/lj_forces.py
+  - tracks/cfd/*.py
+  - tracks/md/*.py
+  - tracks/md/sto-3g.dat
+  - tracks/cfd/assets/
   - docs/results.schema.json
   - examples/notebooks/

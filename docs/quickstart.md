@@ -52,20 +52,22 @@ print("connected:", client is not None)
 
 `uniqx.login()` writes the key (chmod 0600) to `~/.config/uniqx/credentials.json` and sets the in-process env, so subsequent notebook kernels won't need `UNIQX_API_KEY` in their shell — they pick it up from the credentials file. If `login()` raises `KeyError`, you forgot to `export UNIQX_API_KEY`. If `connect()` raises `UNAUTHENTICATED`, the key is wrong, expired, or your account is not yet email-confirmed — back to step 1.
 
-## 3. Run a starter notebook
+## 3. Run a starter
 
-Pick a track and launch Jupyter:
+Pick a track and launch it:
 
 ```bash
-jupyter lab tracks/dft/starter.ipynb     # or cfd / md
+# DFT — Jupyter walkthrough that goes preflight → submit → compare to PySCF
+jupyter lab tracks/dft/starter.ipynb
+
+# CFD — Stokes lid-driven cavity, traced as one uniqx module per time step
+python tracks/cfd/main.py
+
+# MD — NumPy/SciPy baseline AIMD. Your job is to rewrite the SCF loop with ux.fori_loop.
+python tracks/md/baseline.py
 ```
 
-Run all cells. The notebook will:
-
-1. Build a traced module from the problem specification.
-2. Call `uniqx.preflight()` and print the option table.
-3. Submit the recommended option and fetch the result.
-4. Compare against the NumPy/PySCF baseline.
+DFT and CFD already wire into `preflight()` → `submit()` → oracle-compare. MD ships the classical reference only — the challenge is to port it onto the SDK following the same skeleton.
 
 Expected wall-clock for the DFT starter (H₂O / STO-3G): under 30 seconds end-to-job.
 

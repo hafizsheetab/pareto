@@ -2,10 +2,6 @@ numpy>=1.24
 scipy>=1.11
 matplotlib>=3.7
 
-# Uniqx SDK — install from local wheel (not on PyPI):
-#   pip install bazel-bin/sdk/py/uniqx-*.whl
-uniqx>=0.2.2
-
 # JAX backend — needed when config.BACKEND = "jax"
-# jax>=0.4
-# jaxlib>=0.4
+jax>=0.4
+jaxlib>=0.4

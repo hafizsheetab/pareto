@@ -44,7 +44,9 @@ def _render_row(
     Fill one row of three axes with (velocity magnitude | streamlines | pressure).
     Called once per snapshot by plot_snapshots.
     """
-    X, Y   = grid.X, grid.Y
+    x      = np.linspace(0.0, grid.L, grid.N + 2)
+    y      = x.copy()
+    X, Y   = np.meshgrid(x, y)
     speed  = np.sqrt(u**2 + v**2)
     p_full = _embed_pressure(p, grid.N)
 
@@ -71,7 +73,7 @@ def _render_row(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             strm = ax.streamplot(
-                grid.x, grid.y, u, v,
+                x, y, u, v,
                 density=1.2, color=speed, cmap="cool", linewidth=0.8,
             )
             fig.colorbar(strm.lines, ax=ax, label="|u| [m/s]", shrink=0.85)

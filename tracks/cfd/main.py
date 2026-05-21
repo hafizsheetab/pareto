@@ -1,15 +1,16 @@
 # Copyright (c) 2026 ORIQX AG. MIT licensed.
 # =============================================================================
-# main.py — Entry point for the 2D Stokes flow solver.
+# main.py — Entry point for the uniqx 2D Stokes flow solver.
 #
 # Run:
-#   python main.py
+#   python main.py [--steps N] [--n N] [--gateway host:port]
 #
 # Builds one Uniqx IR module that runs the full Stokes iteration server-side,
 # submits it to the gateway, fetches the result, reshapes (u, v, p), and saves
 # a snapshot figure to assets/.
 # =============================================================================
 
+import argparse
 import os
 
 import config
@@ -36,19 +37,20 @@ def _split_uvp(flat: np.ndarray, N: int):
     return u, v, p
 
 
-def main():
+def main(n: int = config.N, n_steps: int = config.N_STEPS, gateway: str | None = None) -> None:
     print("=" * 60)
-    print(" ORIQX CFD — 2D Incompressible Stokes Flow Solver")
-    print(" Chorin's Projection Method  •  single-module server-side run")
+    print("  ORIQX CFD — 2D Incompressible Stokes Flow Solver [uniqx]")
+    print("  Chorin projection  |  single-module server-side run")
     print("=" * 60)
 
-    grid = Grid()
+    grid = Grid(N=n)
     print(f"\n{grid}\n")
 
-    mod, runtime_inputs = run(grid)
+    mod, runtime_inputs = run(grid, n_steps=n_steps)
     print("[main] module built — submitting to gateway…", flush=True)
 
-    gateway = os.environ.get("UNIQX_GATEWAY", "api.oriqx.com:443")
+    if gateway is None:
+        gateway = os.environ.get("UNIQX_GATEWAY", "api.oriqx.com:443")
     api_key = os.environ.get("UNIQX_API_KEY")
     client = ux.connect(gateway, api_key=api_key)
 
@@ -64,22 +66,22 @@ def main():
     flat = _parse_flat_payload(payload)
     u, v, p = _split_uvp(flat, grid.N)
     print(f"[main] received  u{u.shape}  v{v.shape}  p{p.shape}", flush=True)
-    print(f"[main]   max|u|={np.max(np.abs(u)):.6e}  "
-          f"max|v|={np.max(np.abs(v)):.6e}  "
-          f"max|p|={np.max(np.abs(p)):.6e}")
 
     # Single end-of-run snapshot for visualization.
     assets = config.ASSETS_DIR
     os.makedirs(assets, exist_ok=True)
-    plot_snapshots(grid, [(config.N_STEPS, u, v, p)],
-                   save_path=f"{assets}/results.png")
-    np.savez(f"{assets}/snapshots.npz",
-             **{f"u_{config.N_STEPS:04d}": u,
-                f"v_{config.N_STEPS:04d}": v,
-                f"p_{config.N_STEPS:04d}": p})
+    plot_snapshots(grid, [(n_steps, u, v, p)], save_path=f"{assets}/results.png")
 
     print("[main] Done.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="2D Stokes solver — uniqx gateway")
+    parser.add_argument("--n", type=int, default=config.N,
+                        help="interior grid points per side (default: %(default)s)")
+    parser.add_argument("--steps", type=int, default=config.N_STEPS,
+                        help="number of time steps baked into the IR module (default: %(default)s)")
+    parser.add_argument("--gateway", default=None,
+                        help="gateway address, overrides UNIQX_GATEWAY env var")
+    args = parser.parse_args()
+    main(n=args.n, n_steps=args.steps, gateway=args.gateway)

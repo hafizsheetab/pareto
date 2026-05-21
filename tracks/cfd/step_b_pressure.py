@@ -1,9 +1,6 @@
 # Copyright (c) 2026 ORIQX AG. MIT licensed.
 # =============================================================================
-# step_b_pressure.py — Step B: Pressure Poisson equation (QPU backend).
-#
-# Hardware target: CPU/TPU for matrix assembly (Sub-step B.1),
-#                 QPU (or classical JAX) for the linear solve (Sub-step B.2).
+# step_b_pressure.py — Step B: Pressure Poisson equation.
 #
 # Governing equation:
 #   ∇²p = (ρ/Δt) · ∇·u*
@@ -14,13 +11,11 @@
 #   x  — unknown flattened pressure field, shape (N²,)
 #   b  — (ρ/Δt) · ∇·u*, shape (N²,), recomputed every step
 #
-# Solver backends live in linalg.py and are dispatched inside solve_pressure():
-#   method="direct"  — dense JAX LU            (linalg.solve_direct)
-#   method="cg"      — Conjugate Gradient JAX  (linalg.solve_cg)
-#   method="vqls"    — QPU stub                (linalg.solve_vqls)
+# Solver backends live in linalg.py; callers pass a solver_fn callable to
+# solve_pressure():
+#   linalg.solve_direct  — dense JAX LU
+#   linalg.solve_cg      — Conjugate Gradient JAX
 # =============================================================================
-
-import time
 
 import config
 import linalg
@@ -33,7 +28,8 @@ from grid import Grid
 # Sub-step B.1 — Build the Laplacian matrix A  (called ONCE before the loop)
 # ---------------------------------------------------------------------------
 
-def build_poisson_matrix(grid: Grid) -> np.ndarray:
+
+def build_poisson_matrix(grid: Grid, pin: str = "symmetric") -> sp.csr_matrix:
     """
     Assemble the N²×N² discrete Laplacian for the interior pressure nodes.
 
@@ -47,16 +43,16 @@ def build_poisson_matrix(grid: Grid) -> np.ndarray:
     Neumann BC at walls: simply omit the off-domain neighbour term —
     equivalent to ∂p/∂n = 0 at every wall.
 
-    Dirichlet pin at corner k=0 to remove the pressure null space:
-        A[0, :] = 0,  A[0, 0] = 1
+    Null-space pin at corner k=0:
+        pin="row"       — zero row 0 only (standard Dirichlet, fine for LU)
+        pin="symmetric" — zero row 0 AND col 0 (symmetric; required for CG)
 
     Returns
     -------
-    A_dense : ndarray, shape (N², N²)
-        Dense matrix (converted from sparse for use with JAX backends).
+    sp.csr_matrix, shape (N², N²). Call .toarray() when a dense form is needed.
     """
-    N  = grid.N
-    M  = N * N
+    N   = grid.N
+    M   = N * N
     dx2 = grid.dx ** 2
 
     A = sp.lil_matrix((M, M))
@@ -76,16 +72,21 @@ def build_poisson_matrix(grid: Grid) -> np.ndarray:
             if i - 1 >= 0:                  # south
                 A[k, k - N] = 1.0 / dx2
 
-    # Dirichlet pin at corner node (0,0) → k=0  to fix the null space
     A[0, :] = 0.0
     A[0, 0] = 1.0
+    if pin == "symmetric":
+        A[:, 0] = 0.0
+        A[0, 0] = 1.0
+    elif pin != "row":
+        raise ValueError(f"Unknown pin='{pin}'. Use 'symmetric' or 'row'.")
 
-    return A.toarray()          # dense numpy array; JAX wraps this fine
+    return A.tocsr()
 
 
 # ---------------------------------------------------------------------------
 # Sub-step B.1 (per-step) — Build the RHS vector b
 # ---------------------------------------------------------------------------
+
 
 def build_rhs(
     u_star: np.ndarray,
@@ -119,47 +120,30 @@ def build_rhs(
 
 
 # ---------------------------------------------------------------------------
-# Sub-step B.2 — Solve Ax = b via the configured backend
+# Sub-step B.2 — Solve Ax = b
 # ---------------------------------------------------------------------------
+
+
 def solve_pressure(
     A_dense:   np.ndarray,
     b:         np.ndarray,
     grid:      Grid,
-    method:    str   = config.PRESSURE_SOLVER,
-    tolerance: float = config.SOLVER_TOLERANCE,
+    solver_fn=None,
 ) -> np.ndarray:
     """
-    Dispatch  A · x = b  to the chosen solver in linalg.py and return the
-    2D pressure field  p  of shape (N, N).
+    Solve  A · x = b  and return the 2D pressure field  p  of shape (N, N).
 
     Parameters
     ----------
-    A_dense   : ndarray, shape (N², N²) — from build_poisson_matrix()
+    A_dense   : ndarray, shape (N², N²) — from build_poisson_matrix().toarray()
     b         : ndarray, shape (N²,)    — from build_rhs()
     grid      : Grid
-    method    : "direct" | "cg" | "vqls"
-    tolerance : convergence tolerance for iterative / quantum solvers
+    solver_fn : callable(A, b) → x.  Defaults to linalg.solve_direct.
 
     Returns
     -------
     p : ndarray, shape (N, N) — interior pressure field
     """
-    time_start = time.time()
-    if method == "direct":
-        pressure_vector = linalg.solve_direct(A_dense, b)
-        time_finish = time.time()
-        print(f"[solver] Pressure solve time: {time_finish - time_start:.3f} seconds")
-
-    elif method == "cg":
-        pressure_vector = linalg.solve_cg(A_dense, b, tol=tolerance)
-
-    elif method == "vqls":
-        pressure_vector = linalg.solve_vqls(A_dense, b, tol=tolerance)
-
-    else:
-        raise ValueError(
-            f"Unknown pressure solver '{method}'. "
-            "Choose from: 'direct', 'cg', 'vqls'."
-        )
-
-    return np.array(pressure_vector).reshape(grid.N, grid.N)
+    if solver_fn is None:
+        solver_fn = linalg.solve_direct
+    return np.array(solver_fn(A_dense, b)).reshape(grid.N, grid.N)

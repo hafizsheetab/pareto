@@ -5,7 +5,7 @@
 # =============================================================================
 
 # --- Domain ---
-N = 8           # interior grid points per side (total grid is (N+2)×(N+2))
+N = 32          # interior grid points per side (total grid is (N+2)×(N+2))
 L = 1.0         # domain side length [m]
 
 # --- Fluid properties ---
@@ -29,19 +29,14 @@ DT_SAFETY = 0.25    # safety factor (50 % of the theoretical 2D limit)
 LAPLACIAN_ORDER = 1   # used in Step A (∇²u)
 GRADIENT_ORDER  = 1   # used in Step B (∇·u*) and Step C (∇p)
 
-# --- Solver (Step B / QPU step) ---
-PRESSURE_SOLVER   = "direct"    # "direct" | "cg" | "vqls"
-SOLVER_TOLERANCE  = 1e-6    # convergence tolerance for iterative solvers
+# --- Solver (Step B) ---
+PRESSURE_SOLVER = "direct"  # "direct" | "cg"
+CG_TOL          = 1e-6      # CG residual convergence tolerance
 
 # --- Run control ---
-N_STEPS     = 100  # maximum number of time steps
-TOL         = 1e-6  # steady-state divergence tolerance (stop early if reached)
-PRINT_EVERY = 1   # print diagnostics every this many steps
-
-# --- Backend selector (for benchmarking) ---
-# "jax"   → original JAX implementation
-# "uniqx" → Uniqx gateway at localhost:50050
-BACKEND = "uniqx" #"jax"#  #
+N_STEPS     = 100   # maximum number of time steps
+DIV_TOL     = 1e-6  # steady-state velocity divergence tolerance (early stop)
+PRINT_EVERY = 50    # print diagnostics every this many steps
 
 # --- Output ---
 ASSETS_DIR = "assets"                        # all outputs go here (created automatically)

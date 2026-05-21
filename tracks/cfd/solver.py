@@ -24,7 +24,6 @@
 # =============================================================================
 
 import config
-import numpy as np
 import uniqx as ux
 from _traced_ops import (
     block,
@@ -43,21 +42,7 @@ from uniqx.ops.control_flow import fori_loop
 from uniqx.ops.primitives.solvers import linear_solve
 
 
-def _symmetric_pin(A: np.ndarray) -> np.ndarray:
-    """Zero row 0 AND col 0, set A[0, 0] = 1.
-
-    The CPU path in linalg.py only pinned col 0 (DGESV is happy with that),
-    but a symmetric matrix lets the gateway dispatch to Cholesky. The pin
-    still enforces x[0] = 0 because b[0] is forced to 0 every step.
-    """
-    A = A.copy()
-    A[0, :] = 0.0
-    A[:, 0] = 0.0
-    A[0, 0] = 1.0
-    return A
-
-
-def run(grid: Grid, n_steps: int = config.N_STEPS):
+def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
     """
     Trace and return (module, runtime_inputs) for n_steps of the simulation.
 
@@ -74,9 +59,8 @@ def run(grid: Grid, n_steps: int = config.N_STEPS):
     inv_2dx  = 1.0 / (2.0 * grid.dx)
     rho_dt   = grid.rho / grid.dt
     dt_rho   = grid.dt / grid.rho
-    U_lid    = grid.U_lid
 
-    A_pinned = _symmetric_pin(build_poisson_matrix(grid))
+    A_pinned = build_poisson_matrix(grid, pin="symmetric").toarray()
 
     # Initial state, baked as a const carry: u/v zero with lid on top, p zero.
     u0 = [[0.0] * (N + 2) for _ in range(N + 2)]

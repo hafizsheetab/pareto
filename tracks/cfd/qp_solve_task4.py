@@ -225,7 +225,7 @@ def _unit_test(submit: bool = True):
     from numpy_solve import _generate_initial_condition
 
     N = config.N
-    h = config.DOMAIN / N
+    h = config.L / N
     nu = config.NU
 
     print(f"[task4] building trace  N={N}  h={h:.4g}  ν={nu}")

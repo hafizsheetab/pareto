@@ -113,6 +113,23 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
         A_c = A_param
 
         carry_0 = _pack_carry(ux.const(u0), ux.const(v0), ux.const(p0))
+        L_pad = v2.lap(
+            N=N + 2, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+            bc=BoundaryCondition.DIRICHLET,
+        )
+        L_pad = ux.reshape(L_pad, shape=[field, field], result_type=lap_pad_t)
+
+        G_div = v2.div(
+            N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+            bc=BoundaryCondition.DIRICHLET,
+        )
+        G_div_op = ux.reshape(G_div, shape=[Nsq, 2 * Nsq], result_type=div_op_t)
+
+        G_grad = v2.grad_all(
+            N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+            bc=BoundaryCondition.NEUMANN,
+        )
+        G_grad_op = ux.reshape(G_grad, shape=[2 * Nsq, Nsq], result_type=grad_op_t)
 
         def body(_i, carry):
             # IMPORTANT: emit kernel operators INSIDE the body. Hoisting them
@@ -132,32 +149,14 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
             #     v at the lid (=0), which matches DIRICHLET=0 exactly.
             #   • Gradient NEUMANN on the N×N interior — replaces the
             #     `embed_pressure_neumann` ghost-cell scheme one-for-one.
-            L_pad = v2.lap(
-                N=N + 2, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-                bc=BoundaryCondition.DIRICHLET,
-            )
-            L_pad = ux.reshape(L_pad, shape=[field, field], result_type=lap_pad_t)
-
-            G_div = v2.div(
-                N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-                bc=BoundaryCondition.DIRICHLET,
-            )
-            G_div_op = ux.reshape(G_div, shape=[Nsq, 2 * Nsq], result_type=div_op_t)
-
-            G_grad = v2.grad_all(
-                N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-                bc=BoundaryCondition.NEUMANN,
-            )
-            G_grad_op = ux.reshape(G_grad, shape=[2 * Nsq, Nsq], result_type=grad_op_t)
-
             u, v, p = _split_carry(carry)
 
             # --- A. Diffusion: u* = u + dt·ν·∇²u  (laplacian on padded grid) -
             u_pad_flat = ux.reshape(u, shape=[field], result_type=field_flat_t)
             v_pad_flat = ux.reshape(v, shape=[field], result_type=field_flat_t)
 
-            lap_u_pad_flat = ux.matmul(L_pad, u_pad_flat)
-            lap_v_pad_flat = ux.matmul(L_pad, v_pad_flat)
+            lap_u_pad_flat = ux.dot(L_pad, u_pad_flat)
+            lap_v_pad_flat = ux.dot(L_pad, v_pad_flat)
 
             lap_u_2d = ux.reshape(lap_u_pad_flat, shape=[N + 2, N + 2], result_type=field_t)
             lap_v_2d = ux.reshape(lap_v_pad_flat, shape=[N + 2, N + 2], result_type=field_t)
@@ -176,7 +175,7 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
             u_plus_v_flat = ux.concatenate(
                 u_star_flat, v_star_flat, axis=0, result_type=double_flat_t,
             )
-            div_val_flat = ux.matmul(G_div_op, u_plus_v_flat)
+            div_val_flat = ux.dot(G_div_op, u_plus_v_flat)
 
             b = div_val_flat * rho_dt
             tail = ux.slice(
@@ -193,7 +192,7 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
             p_new = ux.reshape(x, shape=[N, N], result_type=interior_t)
 
             # --- C. Correction: u^{n+1} = u* − (Δt/ρ)·∇p --------------------
-            grad_p_flat = ux.matmul(G_grad_op, x)
+            grad_p_flat = ux.dot(G_grad_op, x)
             u_v_new_flat = u_plus_v_flat - grad_p_flat * dt_rho
 
             u_int_flat = ux.slice(

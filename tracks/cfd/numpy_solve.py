@@ -333,6 +333,6 @@ def compute_energy_dissipation(u_hat, v_hat, w_hat, k2, nu, V=config.L**3):
     return E_k, eps
 
 
-# run(Grid3d(N=32))
+run(Grid3d(N=64))
 
 # _generate_initial_condition(4)

@@ -11,7 +11,7 @@ import config
 
 # Default gateway and key from main.py
 DEFAULT_GATEWAY = "api.oriqx.com:443"
-DEFAULT_API_KEY = "uxk_1bdb37b0f52f9d89260d86f2d21e9513"
+DEFAULT_API_KEY = "uxk_f1fbb49476f7e4606c87f1dccc0a7df5"
 
 def run_uniqx_benchmark(grid, n_steps, gateway, api_key, backend="compiled"):
     """Executes the Uniqx solver and returns the elapsed wall time."""
@@ -105,4 +105,4 @@ def benchmark_scaling(start_n=32, end_n=64, step_size=4, n_steps=50, backend="co
 
 if __name__ == "__main__":
     # You can now easily change the backend here
-    benchmark_scaling(start_n=32, end_n=64, step_size=8, n_steps=50, backend="qsim")
+    benchmark_scaling(start_n=16, end_n=64, step_size=8, n_steps=50, backend="compiled")

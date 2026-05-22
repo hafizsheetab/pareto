@@ -54,7 +54,7 @@ from uniqx_traced_ops import (
 )
 
 DEFAULT_GATEWAY = "api.oriqx.com:443"
-DEFAULT_API_KEY = "uxk_1bdb37b0f52f9d89260d86f2d21e9513"
+DEFAULT_API_KEY = "uxk_f1fbb49476f7e4606c87f1dccc0a7df5"
 
 # Wavenumber used to regularize the singular periodic Laplacian for the
 # pressure-projection solve. k_reg²·I shifts every eigenvalue up by k_reg²,

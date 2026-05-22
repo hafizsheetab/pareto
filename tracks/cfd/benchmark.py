@@ -6,12 +6,12 @@ import numpy as np
 import uniqx as ux
 from grid import Grid
 import jax_solve
-import solver as uniqx_solver
+import solver_copy as uniqx_solver
 import config
 
 # Default gateway and key from main.py
 DEFAULT_GATEWAY = "api.oriqx.com:443"
-DEFAULT_API_KEY = "uxk_55edf43297268216e0c5cc12644044af"
+DEFAULT_API_KEY = "uxk_1bdb37b0f52f9d89260d86f2d21e9513"
 
 def run_uniqx_benchmark(grid, n_steps, gateway, api_key, backend="compiled"):
     """Executes the Uniqx solver and returns the elapsed wall time."""
@@ -23,6 +23,7 @@ def run_uniqx_benchmark(grid, n_steps, gateway, api_key, backend="compiled"):
     
     t0 = time.perf_counter()
     job_id = ux.submit(mod, client=client, runtime_inputs=runtime_inputs)
+    # print(job_id)
     res = ux.get(job_id, client=client, timeout=900.0)
     elapsed = time.perf_counter() - t0
     
@@ -76,7 +77,7 @@ def benchmark_scaling(start_n=32, end_n=64, step_size=4, n_steps=50, backend="co
         print(f"{n:5d} | {jax_ms:15.3f} | {uniqx_results[-1]:25.3f}")
 
     # --- Save Data to CSV ---
-    csv_path = f"scaling_results_{backend}.csv"
+    csv_path = f"scaling_results_{backend}_task_2.csv"
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["N", "jax_ms_per_step", f"uniqx_{backend}_ms_per_step"])
@@ -94,7 +95,7 @@ def benchmark_scaling(start_n=32, end_n=64, step_size=4, n_steps=50, backend="co
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend()
     
-    plot_path = os.path.join(config.ASSETS_DIR, f"scaling_plot_{backend}.png")
+    plot_path = os.path.join(config.ASSETS_DIR, f"scaling_plot_{backend}_task_2.png")
     plt.savefig(plot_path)
     
     print("-" * 70)

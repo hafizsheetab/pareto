@@ -70,19 +70,17 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
     v0 = [[0.0] * (N + 2) for _ in range(N + 2)]
     p0 = [[0.0] * N for _ in range(N)]
 
-    field_t      = ut.tensor("f64", [N + 2, N + 2])
-    interior_t   = ut.tensor("f64", [N, N])
-    flat_t       = ut.tensor("f64", [Nsq])
-    col_t        = ut.tensor("f64", [Nsq, 1])
-    pad_col_t    = ut.tensor("f64", [field, 1])
-    double_col_t = ut.tensor("f64", [2 * Nsq, 1])
-    div_op_t     = ut.tensor("f64", [Nsq, 2 * Nsq])
-    grad_op_t    = ut.tensor("f64", [2 * Nsq, Nsq])
-    lap_pad_t    = ut.tensor("f64", [field, field])
-    tail_t       = ut.tensor("f64", [Nsq - 1])
-    field_flat_t = ut.tensor("f64", [field])
-    carry_t      = ut.tensor("f64", [carry_n])
-    A_t          = ut.tensor("f64", [Nsq, Nsq])
+    field_t       = ut.tensor("f64", [N + 2, N + 2])
+    interior_t    = ut.tensor("f64", [N, N])
+    flat_t        = ut.tensor("f64", [Nsq])
+    double_flat_t = ut.tensor("f64", [2 * Nsq])
+    div_op_t      = ut.tensor("f64", [Nsq, 2 * Nsq])
+    grad_op_t     = ut.tensor("f64", [2 * Nsq, Nsq])
+    lap_pad_t     = ut.tensor("f64", [field, field])
+    tail_t        = ut.tensor("f64", [Nsq - 1])
+    field_flat_t  = ut.tensor("f64", [field])
+    carry_t       = ut.tensor("f64", [carry_n])
+    A_t           = ut.tensor("f64", [Nsq, Nsq])
 
     def _split_carry(carry):
         """carry (264,) → (u (10,10), v (10,10), p (8,8))."""
@@ -114,51 +112,55 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
         # A_param is the (Nsq, Nsq) Poisson matrix supplied at submit time.
         A_c = A_param
 
-        # Hoisted operators — emitted once in IR, executed once per submit
-        # (NOT once per loop iteration).
-        #
-        # Laplacian is built on the (N+2)² *padded* grid: the lid value is
-        # already encoded in u via embed_velocity, so the kernel's DIRICHLET
-        # ghost cells only affect rows/cols outside the padded grid, which we
-        # discard when we extract the interior.
-        L_pad = v2.lap(
-            N=N + 2, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-            bc=BoundaryCondition.DIRICHLET,
-        )
-        L_pad = ux.reshape(L_pad, shape=[field, field], result_type=lap_pad_t)
-
-        # Divergence on the (N, N) interior with DIRICHLET=0 ghosts. The
-        # central-difference divergence stencil only reaches u/v at the
-        # side/bottom walls (all zero) and never the lid, so this matches
-        # the original padded-field computation exactly.
-        G_div = v2.div(
-            N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-            bc=BoundaryCondition.DIRICHLET,
-        )
-        G_div_op = ux.reshape(G_div, shape=[Nsq, 2 * Nsq], result_type=div_op_t)
-
-        # Pressure gradient needs NEUMANN (∂p/∂n = 0); DIRICHLET=0 here
-        # would inject a spurious p=0 wall and corrupt the correction step.
-        G_grad = v2.grad_all(
-            N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
-            bc=BoundaryCondition.NEUMANN,
-        )
-        G_grad_op = ux.reshape(G_grad, shape=[2 * Nsq, Nsq], result_type=grad_op_t)
-
         carry_0 = _pack_carry(ux.const(u0), ux.const(v0), ux.const(p0))
 
         def body(_i, carry):
+            # IMPORTANT: emit kernel operators INSIDE the body. Hoisting them
+            # outside `fori_loop` (so they emit once into IR) traces fine
+            # locally but the gateway pipeline fails to lower kernel ops
+            # captured by an outer scope; jobs come back with "unknown error".
+            # Re-emitting per iteration is trace-time only — the gateway is
+            # free to dedup; the runtime cost is unchanged.
+            #
+            # BC choices:
+            #   • Laplacian DIRICHLET on the (N+2)² padded grid — the lid
+            #     value is already baked into u_padded by embed_velocity,
+            #     so the zero-Dirichlet ghosts outside the padded grid only
+            #     contaminate rows the inner `block(_, 1, 1, N, N)` discards.
+            #   • Divergence DIRICHLET on the N×N interior — the only ghost
+            #     the central-diff stencil reaches outside the interior is
+            #     v at the lid (=0), which matches DIRICHLET=0 exactly.
+            #   • Gradient NEUMANN on the N×N interior — replaces the
+            #     `embed_pressure_neumann` ghost-cell scheme one-for-one.
+            L_pad = v2.lap(
+                N=N + 2, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+                bc=BoundaryCondition.DIRICHLET,
+            )
+            L_pad = ux.reshape(L_pad, shape=[field, field], result_type=lap_pad_t)
+
+            G_div = v2.div(
+                N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+                bc=BoundaryCondition.DIRICHLET,
+            )
+            G_div_op = ux.reshape(G_div, shape=[Nsq, 2 * Nsq], result_type=div_op_t)
+
+            G_grad = v2.grad_all(
+                N=N, dx=grid.dx, dy=grid.dy, dz=1.0, dim="2D",
+                bc=BoundaryCondition.NEUMANN,
+            )
+            G_grad_op = ux.reshape(G_grad, shape=[2 * Nsq, Nsq], result_type=grad_op_t)
+
             u, v, p = _split_carry(carry)
 
             # --- A. Diffusion: u* = u + dt·ν·∇²u  (laplacian on padded grid) -
-            u_pad_col = ux.reshape(u, shape=[field, 1], result_type=pad_col_t)
-            v_pad_col = ux.reshape(v, shape=[field, 1], result_type=pad_col_t)
+            u_pad_flat = ux.reshape(u, shape=[field], result_type=field_flat_t)
+            v_pad_flat = ux.reshape(v, shape=[field], result_type=field_flat_t)
 
-            lap_u_pad_col = ux.dot(L_pad, u_pad_col)
-            lap_v_pad_col = ux.dot(L_pad, v_pad_col)
+            lap_u_pad_flat = ux.matmul(L_pad, u_pad_flat)
+            lap_v_pad_flat = ux.matmul(L_pad, v_pad_flat)
 
-            lap_u_2d = ux.reshape(lap_u_pad_col, shape=[N + 2, N + 2], result_type=field_t)
-            lap_v_2d = ux.reshape(lap_v_pad_col, shape=[N + 2, N + 2], result_type=field_t)
+            lap_u_2d = ux.reshape(lap_u_pad_flat, shape=[N + 2, N + 2], result_type=field_t)
+            lap_v_2d = ux.reshape(lap_v_pad_flat, shape=[N + 2, N + 2], result_type=field_t)
 
             u_int_prev = block(u, 1, 1, N, N)
             v_int_prev = block(v, 1, 1, N, N)
@@ -169,14 +171,15 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
             v_star_int = v_int_prev + lap_v_int * dt_nu
 
             # --- B. Pressure Poisson: A · x = b = (ρ/Δt)·∇·u* ---------------
-            u_star_col = ux.reshape(u_star_int, shape=[Nsq, 1], result_type=col_t)
-            v_star_col = ux.reshape(v_star_int, shape=[Nsq, 1], result_type=col_t)
-            u_plus_v   = ux.concatenate(u_star_col, v_star_col, axis=0, result_type=double_col_t)
-            div_val    = ux.dot(G_div_op, u_plus_v)
+            u_star_flat = ux.reshape(u_star_int, shape=[Nsq], result_type=flat_t)
+            v_star_flat = ux.reshape(v_star_int, shape=[Nsq], result_type=flat_t)
+            u_plus_v_flat = ux.concatenate(
+                u_star_flat, v_star_flat, axis=0, result_type=double_flat_t,
+            )
+            div_val_flat = ux.matmul(G_div_op, u_plus_v_flat)
 
-            b_field = ux.reshape(div_val, shape=[N, N], result_type=interior_t) * rho_dt
-            b       = ux.reshape(b_field, shape=[Nsq], result_type=flat_t)
-            tail    = ux.slice(
+            b = div_val_flat * rho_dt
+            tail = ux.slice(
                 b, start_indices=[1], limit_indices=[Nsq],
                 result_type=tail_t,
             )
@@ -190,21 +193,19 @@ def run(grid: Grid, n_steps: int = config.N_STEPS, U_lid: float = config.U_LID):
             p_new = ux.reshape(x, shape=[N, N], result_type=interior_t)
 
             # --- C. Correction: u^{n+1} = u* − (Δt/ρ)·∇p --------------------
-            p_col  = ux.reshape(p_new, shape=[Nsq, 1], result_type=col_t)
-            grad_p = ux.dot(G_grad_op, p_col)
+            grad_p_flat = ux.matmul(G_grad_op, x)
+            u_v_new_flat = u_plus_v_flat - grad_p_flat * dt_rho
 
-            u_v_new_col = u_plus_v - grad_p * dt_rho
-
-            u_int_col = ux.slice(
-                u_v_new_col, start_indices=[0, 0], limit_indices=[Nsq, 1],
-                result_type=col_t,
+            u_int_flat = ux.slice(
+                u_v_new_flat, start_indices=[0], limit_indices=[Nsq],
+                result_type=flat_t,
             )
-            v_int_col = ux.slice(
-                u_v_new_col, start_indices=[Nsq, 0], limit_indices=[2 * Nsq, 1],
-                result_type=col_t,
+            v_int_flat = ux.slice(
+                u_v_new_flat, start_indices=[Nsq], limit_indices=[2 * Nsq],
+                result_type=flat_t,
             )
-            u_int = ux.reshape(u_int_col, shape=[N, N], result_type=interior_t)
-            v_int = ux.reshape(v_int_col, shape=[N, N], result_type=interior_t)
+            u_int = ux.reshape(u_int_flat, shape=[N, N], result_type=interior_t)
+            v_int = ux.reshape(v_int_flat, shape=[N, N], result_type=interior_t)
 
             u_new = embed_velocity(u_int, N, U_lid)
             v_new = embed_velocity(v_int, N, 0.0)

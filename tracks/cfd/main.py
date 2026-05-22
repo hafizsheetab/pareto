@@ -19,6 +19,7 @@ import uniqx as ux
 from grid import Grid
 from solver import run
 from visualize import plot_snapshots
+import graphviz
 
 
 def _parse_flat_payload(payload: bytes) -> np.ndarray:
@@ -47,17 +48,18 @@ def main(n: int = config.N, n_steps: int = config.N_STEPS, gateway: str | None =
     print(f"\n{grid}\n")
 
     mod, runtime_inputs = run(grid, n_steps=n_steps)
+    runtime_inputs.append("backend=compiled")
     print("[main] module built — submitting to gateway…", flush=True)
-
-    if gateway is None:
-        gateway = os.environ.get("UNIQX_GATEWAY", "api.oriqx.com:443")
-    api_key = os.environ.get("UNIQX_API_KEY")
+    gateway =  "api.oriqx.com:443"
+    api_key = "uxk_291c86ad1347b417e96d897d0d655a19"
+    print("API_KEYYYYYYY", api_key)
     client = ux.connect(gateway, api_key=api_key)
-
     job_id = ux.submit(mod, client=client, runtime_inputs=runtime_inputs)
-    print(f"[main] job_id = {job_id}", flush=True)
+    print(job_id, "YAYYYY")
+    # print(f"[main] job_id = {job_id}", flush=True)
 
     res = ux.get(job_id, client=client, timeout=600.0)
+    print(res.keys())
     if res.get("state") != 10:
         payload = res.get("payload") or res.get("result_payload") or b""
         raise SystemExit(f"[main] job failed (state={res.get('state')}): {payload!r}")
